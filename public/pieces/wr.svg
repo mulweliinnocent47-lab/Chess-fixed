@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1000" height="1000">
+  <g style="fill:none; fill-opacity:1; fill-rule:evenodd;
+            stroke:#000000; stroke-width:1.5;
+            stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;
+            stroke-dasharray:none; stroke-opacity:1;"
+     transform="matrix(1,0,0,-1,0,1000)">
+    <path
+      d="M 357 585 v -222 h 285 v 222 h -285 z
+         M 210 100 l -24 24 v 86 l 128 129 v 250 l -110 96 v 113 l 36
+         35 h 112 l 22 -21 v -32 h 36 v 32 l 21 21 h 138 l 21 -21 v
+         -32 h 35 v 32 l 22 21 h 113 l 36 -35 v -113 l -110 -96 v -250
+         l 128 -129 v -86 l -24 -24 h -580 z
+         M 230 198 v -48 h 540 v 48 h -540 z
+         M 352 322 l -82 -80 h 460 l -82 80 h -296 z
+         M 452 781 v -32 l -18 -18 h -81 l -19 18 v 34 h -70 l -16 -17
+         v -70 l 85 -69 h 334 l 85 69 v 70 l -16 17 h -70 v -34 l -19
+         -18 h -81 l -18 18 v 32 h -96 z"
+      style="fill:#000000; stroke:#000000;" />
+   <path
+      d="M 357 585 v -222 h 285 v 222 h -285 z
+         M 230 198 v -48 h 540 v 48 h -540 z
+         M 352 322 l -82 -80 h 460 l -82 80 h -296 z
+         M 452 781 v -32 l -18 -18 h -81 l -19 18 v 34 h -70 l -16 -17
+         v -70 l 85 -69 h 334 l 85 69 v 70 l -16 17 h -70 v -34 l -19
+         -18 h -81 l -18 18 v 32 h -96 z"
+      style="fill:#ffffff; stroke:#000000;" />
+  </g>
+</svg>

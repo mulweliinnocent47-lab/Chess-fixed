@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1000" height="1000">
+  <g style="fill:none; fill-opacity:1; fill-rule:evenodd;
+            stroke:#000000; stroke-width:1.5;
+            stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;
+            stroke-dasharray:none; stroke-opacity:1;"
+     transform="matrix(1,0,0,-1,0,1000)">
+    <path
+      d="M 201 382 q -17 0 -29.5 -11 t -12.5 -28 q 0 -6 4 -13 q 16 0 28.5 10.5 t
+         12.5 26.5 q 0 5 -3 15 z
+         M 814 189 l 1 46 q 0 204 -104 334 q -89 113 -163 113 q -5 0 -12 -2 q -1
+         0 -2 1 h -3 h -2 q -17 0 -17 -13 q 0 -6 8 -13 q 67 -5 147 -96 q 102
+         -119 102 -340 q 0 -2 -1 -8 v -9 v -10 v -7 q 1 -13 8 -21 t 17 -8 q 8 0
+         14 8.5 t 7 24.5 z
+         M 291 548 h 1 h 2 q 2 0 3 -1 h 1 q 25 0 54.5 25 t 29.5 43 q 0 5 -4 10 q
+         -12 7 -25 7 q -24 0 -48 -19.5 t -24 -43.5 q 0 -14 10 -21 z
+         M 871 100 l -527 2 q 2 59 22.5 98 t 55.5 83 q 31 39 42 57 q 18 31 22 67
+         q -62 -25 -98 -64 q -17 -19 -26 -33 q -13 -23 -41 -65 q -8 -9 -18 -10 q
+         -32 0 -32 39 q -13 -16 -29 -16 q -2 0 -24 6 q -39 10 -57.5 25.5 t -35.5
+         52.5 q 7 46 47 130 q 21 46 56 117 q 38 76 53 131 q 2 17 2 33 q 0 7 -7
+         67 h 2 h 3 q 2 0 3 1 h 2 q 56 0 123 -37 q 7 -4 7 -5 q 36 59 55 59 q 31
+         -16 45 -36 q 11 -17 26 -66 q 9 3 21 3 q 103 0 200 -129 q 113 -149 113
+         -405 q 0 -52 -5 -105 z"
+      style="fill:#000000; stroke:#000000;" />
+   <path
+      d="M 201 382 q -17 0 -29.5 -11 t -12.5 -28 q 0 -6 4 -13 q 16 0 28.5 10.5 t
+         12.5 26.5 q 0 5 -3 15 z
+         M 814 189 l 1 46 q 0 204 -104 334 q -89 113 -163 113 q -5 0 -12 -2 q -1
+         0 -2 1 h -3 h -2 q -17 0 -17 -13 q 0 -6 8 -13 q 67 -5 147 -96 q 102
+         -119 102 -340 q 0 -2 -1 -8 v -9 v -10 v -7 q 1 -13 8 -21 t 17 -8 q 8 0
+         14 8.5 t 7 24.5 z
+         M 291 548 h 1 h 2 q 2 0 3 -1 h 1 q 25 0 54.5 25 t 29.5 43 q 0 5 -4 10 q
+         -12 7 -25 7 q -24 0 -48 -19.5 t -24 -43.5 q 0 -14 10 -21 z"
+      style="fill:#ffffff; stroke:#000000;" />
+  </g>
+</svg>

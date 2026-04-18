@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="1000" height="1000">
+  <g style="fill:none; fill-opacity:1; fill-rule:evenodd;
+            stroke:#000000; stroke-width:1.5;
+            stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:4;
+            stroke-dasharray:none; stroke-opacity:1;"
+     transform="matrix(1,0,0,-1,0,1000)">
+    <path
+      d="M 725 151 q 0 106 -44 167 q -27 38 -86 72 q -49 29 -49 53 q 0 9 5.5 14
+         t 19.5 13 q 27 16 38 32 t 11 46 q 0 55 -59 90 q -16 10 -22.5 15.5 t
+         -6.5 14.5 q 0 23 13 39 q 8 12 10 17.5 t 2 18.5 q 0 21 -17.5 36 t -39.5
+         15 q -21 0 -38 -15 t -17 -36 q 0 -19 12.5 -35.5 t 12.5 -39.5 q 0 -9 -7
+         -15.5 t -22 -14.5 q -58 -35 -58 -90 q 0 -49 49 -78 q 10 -6 17 -13 t 7
+         -14 q 0 -24 -49 -53 q -60 -36 -86 -73 q -43 -61 -43 -166 h 447 z
+         M 234 101 q -1 23 -1 58 q 0 92 32 158 q 36 71 135 121 q -33 10 -52 44 q
+         -18 30 -18 67 q 0 85 85 120 q -21 37 -21 71 q 0 43 32.5 70 t 75.5 27 t
+         75 -27.5 t 32 -69.5 q 0 -34 -22 -71 q 86 -35 86 -120 q 0 -35 -18 -67 q
+         -21 -34 -53 -44 q 100 -51 136 -122 q 32 -64 32 -157 q 0 -32 -2 -58 h
+         -534 z"
+      style="fill:#000000; stroke:#000000;" />
+   <path
+      d="M 725 151 q 0 106 -44 167 q -27 38 -86 72 q -49 29 -49 53 q 0 9 5.5 14
+         t 19.5 13 q 27 16 38 32 t 11 46 q 0 55 -59 90 q -16 10 -22.5 15.5 t
+         -6.5 14.5 q 0 23 13 39 q 8 12 10 17.5 t 2 18.5 q 0 21 -17.5 36 t -39.5
+         15 q -21 0 -38 -15 t -17 -36 q 0 -19 12.5 -35.5 t 12.5 -39.5 q 0 -9 -7
+         -15.5 t -22 -14.5 q -58 -35 -58 -90 q 0 -49 49 -78 q 10 -6 17 -13 t 7
+         -14 q 0 -24 -49 -53 q -60 -36 -86 -73 q -43 -61 -43 -166 h 447 z"
+      style="fill:#ffffff; stroke:#000000;" />
+  </g>
+</svg>
