@@ -54,7 +54,7 @@ export function EvalBar({ cp, orientation, loading }: Props) {
     >
       {/* Top half — the side at the top of the board */}
       <div
-        className="absolute inset-x-0 top-0 transition-[height] duration-300 ease-out"
+        className="absolute inset-x-0 top-0 transition-[height] duration-100 ease-out"
         style={{
           height: `${topShare}%`,
           background:
@@ -65,7 +65,7 @@ export function EvalBar({ cp, orientation, loading }: Props) {
       />
       {/* Bottom half */}
       <div
-        className="absolute inset-x-0 bottom-0 transition-[height] duration-300 ease-out"
+        className="absolute inset-x-0 bottom-0 transition-[height] duration-100 ease-out"
         style={{
           height: `${bottomShare}%`,
           background:

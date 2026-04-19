@@ -146,11 +146,11 @@ function PuzzlesPage() {
       (expected.length === 5 && uci === expected.slice(0, 4));
 
     if (!ok) {
-      sfx.gameOverLose();
+      sfx.wrong();
       setStatus("wrong");
       setLoaded({ ...loaded, attempts: loaded.attempts + 1 });
       // Reset to puzzle start after a brief flash.
-      setTimeout(() => reset(), 900);
+      setTimeout(() => reset(), 500);
       return;
     }
 
@@ -207,7 +207,7 @@ function PuzzlesPage() {
         setStep(nextStep);
         setStatus("idle");
         refresh();
-      }, 350);
+      }, 150);
     } else {
       // No opponent reply (shouldn't happen in valid puzzles, but be safe).
       setStep(nextStep);

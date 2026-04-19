@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { memo,
+ useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
@@ -11,7 +12,7 @@ type Props = {
   pgn: string;
 };
 
-export function MoveHistory({ sanHistory, currentPly, onJump, pgn }: Props) {
+export const MoveHistory = memo(function MoveHistory({ sanHistory, currentPly, onJump, pgn }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -98,3 +99,4 @@ export function MoveHistory({ sanHistory, currentPly, onJump, pgn }: Props) {
     </div>
   );
 }
+);

@@ -156,18 +156,18 @@ function PuzzleRushPage() {
   // ── Move outcome handlers ─────────────────────────────────────────────────
 
   const handleWrong = () => {
-    sfx.gameOverLose();
+    sfx.wrong();
     setFlash("wrong");
     setStreak(0);
     setTimeout(() => {
       if (phaseRef.current !== "playing") return;
       setFlash(null);
       loadNextPuzzle();
-    }, 700);
+    }, 400);
   };
 
   const handleSolved = () => {
-    sfx.gameOverWin();
+    sfx.correct();
     setFlash("solved");
     addGems(1);
     setScore((s) => s + 1);
@@ -182,7 +182,7 @@ function PuzzleRushPage() {
       if (phaseRef.current !== "playing") return;
       setFlash(null);
       loadNextPuzzle();
-    }, 500);
+    }, 350);
   };
 
   // ── Move handling ─────────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ function PuzzleRushPage() {
           sfx.move();
           refresh();
         } catch { /* state changed between tick — safe to ignore */ }
-      }, 300);
+      }, 150);
     }
   };
 

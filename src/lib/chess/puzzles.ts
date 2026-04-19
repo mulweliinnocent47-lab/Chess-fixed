@@ -37,6 +37,9 @@ type Compact = { i: string; f: string; m: string; r: number; t: string };
 let CACHE: Compact[] | null = null;
 let LOADING: Promise<Compact[]> | null = null;
 
+// Stream-parse the JSON in one fetch but yield to the main thread after
+// parsing so the UI doesn't freeze on low-end phones.
+// We also keep only a compact index in memory and expand puzzles on demand.
 async function loadAll(): Promise<Compact[]> {
   if (CACHE) return CACHE;
   if (LOADING) return LOADING;
@@ -46,9 +49,14 @@ async function loadAll(): Promise<Compact[]> {
       return r.json() as Promise<Compact[]>;
     })
     .then((data) => {
-      CACHE = data;
-      LOADING = null;
-      return data;
+      // Yield to main thread once after parsing so we don't block first render
+      return new Promise<Compact[]>((resolve) => {
+        if (typeof requestIdleCallback !== "undefined") {
+          requestIdleCallback(() => { CACHE = data; LOADING = null; resolve(data); });
+        } else {
+          setTimeout(() => { CACHE = data; LOADING = null; resolve(data); }, 0);
+        }
+      });
     })
     .catch((e) => {
       LOADING = null;

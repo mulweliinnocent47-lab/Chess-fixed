@@ -1,5 +1,6 @@
 import type { Chess } from "chess.js";
-import { useMemo } from "react";
+import { memo,
+ useMemo } from "react";
 
 type Props = {
   chess: Chess;
@@ -12,7 +13,7 @@ const VALUE: Record<string, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 const ORDER = ["q", "r", "b", "n", "p"];
 const START: Record<string, number> = { p: 8, n: 2, b: 2, r: 2, q: 1, k: 1 };
 
-export function CapturedPieces({ chess, side, size = "sm" }: Props) {
+export const CapturedPieces = memo(function CapturedPieces({ chess, side, size = "sm" }: Props) {
   const { captured, diff } = useMemo(() => {
     const board = chess.board();
     const counts: Record<"w" | "b", Record<string, number>> = {
@@ -70,3 +71,4 @@ export function CapturedPieces({ chess, side, size = "sm" }: Props) {
     </div>
   );
 }
+);

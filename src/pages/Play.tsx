@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chess, type Square } from "chess.js";
 import { Board } from "@/components/chess/Board";
 // (BotPicker removed — opponent is locked at game start)
@@ -17,13 +17,15 @@ import {
   bestMove,
   ensureReady,
   evaluate,
+  liveEvaluate,
+  stopEngine,
+  stopLiveEngine,
   LEVELS,
   setLevel,
-  stop,
 } from "@/lib/chess/engine";
 import { bookMove, loadEco, lookupEco } from "@/lib/chess/eco";
 import { BOTS, pick } from "@/lib/chess/bots";
-import { sfx, setMuted, isMuted } from "@/lib/chess/sounds";
+import { sfx, setMuted, isMuted, resetTensecWarning } from "@/lib/chess/sounds";
 import { PageTransition } from "@/components/PageTransition";
 import { useGameState, type Color } from "@/lib/chess/gameContext";
 import { useClock, type TimeControl } from "@/lib/chess/useClock";
@@ -113,7 +115,7 @@ function PlayPage() {
   const [muted, setMutedState] = useState<boolean>(isMuted());
   const [botMessage, setBotMessage] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
-  const [liveCp, setLiveCp] = useState<number | null>(null);
+  // liveCp state removed — HorizontalEvalBar now uses direct DOM updates via game loop
   const [pendingPromo, setPendingPromo] = useState<{ from: Square; to: Square } | null>(null);
   const [premove, setPremove] = useState<{ from: Square; to: Square; promotion?: "q" | "r" | "b" | "n" } | null>(null);
   const [results, setResults] = useState<ResultsData | null>(null);
@@ -172,20 +174,29 @@ function PlayPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tc.initial, tc.increment]);
 
-  // ---------- Engine ----------
+  // ---------- Engine + ECO ----------
   useEffect(() => {
     let mounted = true;
+    // Engine init: highest priority — do this immediately.
     (async () => {
       await ensureReady();
       await setLevel(level);
       if (mounted) setEngineReady(true);
     })();
-    loadEco().then((m) => {
-      ecoMapRef.current = m;
-    });
-    return () => {
-      mounted = false;
+    // ECO book is 3.6 MB — defer until the browser is idle so it doesn't
+    // compete with engine init or the first render.
+    const scheduleEco = () => {
+      loadEco().then((m) => {
+        if (mounted) ecoMapRef.current = m;
+      });
     };
+    if (typeof requestIdleCallback !== "undefined") {
+      const id = requestIdleCallback(scheduleEco, { timeout: 3000 });
+      return () => { mounted = false; cancelIdleCallback(id); };
+    } else {
+      const id = setTimeout(scheduleEco, 1500);
+      return () => { mounted = false; clearTimeout(id); };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -208,16 +219,19 @@ function PlayPage() {
     const map = ecoMapRef.current;
     if (!map) return;
     const entry = lookupEco(map, fullGame.fen());
-    if (entry?.name) setOpeningName(entry.name);
+    if (entry?.name) startTransition(() => setOpeningName(entry.name));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fullGame, totalPlies]);
 
+  // totalPlies is in deps because displayChess is often the same object reference
+  // (fullGame mutated in place). Without totalPlies, useMemo won't rerun after
+  // a move and lastMove stays stale — breaking the yellow highlight entirely.
   const lastMove = useMemo(() => {
     const verbose = displayChess.history({ verbose: true });
     if (!verbose.length) return null;
     const m = verbose[verbose.length - 1];
     return { from: m.from as Square, to: m.to as Square };
-  }, [displayChess]);
+  }, [displayChess, totalPlies]);
 
   const legalTargets = useMemo<Square[]>(() => {
     if (!selected || !isLiveView) return [];
@@ -238,6 +252,8 @@ function PlayPage() {
     if (m.flags.includes("k") || m.flags.includes("q")) sfx.castle();
     else if (m.flags.includes("c") || m.flags.includes("e")) sfx.capture();
     else sfx.move();
+    // Promotion sound fires after the base move sound
+    if (m.promotion) setTimeout(() => sfx.promote(), 40);
     if (fullGame.inCheck()) sfx.check();
     if (fullGame.isGameOver()) {
       if (fullGame.isDraw() || fullGame.isStalemate()) sfx.draw();
@@ -251,7 +267,8 @@ function PlayPage() {
   // Show a bot line. Bubble persists until the player makes a move (cleared in performMove).
   const showBotLine = (lines: string[]) => {
     if (!lines || !lines.length) return;
-    setBotMessage(pick(lines));
+    // Low-priority update — doesn't need to block the move render
+    startTransition(() => setBotMessage(pick(lines)));
   };
 
   // Material counter (player POV) — used for "Comeback" achievement & blunder detection
@@ -277,7 +294,7 @@ function PlayPage() {
     }
     try {
       const fen = fullGame.fen();
-      const r = await evaluate(fen, { movetime: 150, depth: 10 });
+      const r = await evaluate(fen, { movetime: 80 });
       const prev = cplRef.current.lastEvalCp;
       const moverPovAfter = -r.cp;
       if (prev !== null) {
@@ -344,7 +361,8 @@ function PlayPage() {
         } else if (fullGame.isGameOver() && !fullGame.isDraw()) {
           showBotLine(bot.onWin);
         }
-        recordCpl(false);
+        // Defer CPL recording so it never delays bot move rendering
+        setTimeout(() => recordCpl(false), 200);
         refresh();
 
         // Try to execute queued premove now that it's player's turn
@@ -358,7 +376,7 @@ function PlayPage() {
             // Defer slightly so the bot's move animation registers first
             setTimeout(() => {
               performMove(queued.from, queued.to, (queued.promotion ?? candidate.promotion) as "q" | "r" | "b" | "n" | undefined);
-            }, 60);
+            }, 30);
           }
         }
       }
@@ -374,23 +392,40 @@ function PlayPage() {
     if (!isLiveView) return;
     if (!isPlayerTurn() && !fullGame.isGameOver() && !thinking) {
       setThinking(true);
-      const t = setTimeout(triggerEngineMove, 80);
+      const t = setTimeout(triggerEngineMove, 50);
       return () => clearTimeout(t);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engineReady, totalPlies, playerColor, isLiveView]);
 
-  // Live engine evaluation for the eval bar
+  // Live eval bar: triggered by displayChess / reviewing changes.
+  // HorizontalEvalBar registers setLiveEvalCallback and receives updates
+  // directly via the 60fps game loop — no React state involved.
   useEffect(() => {
-    if (!engineReady) return;
-    if (reviewing) return;
+    if (!engineReady || reviewing) return;
     const seq = ++evalSeq.current;
     const fen = displayChess.fen();
-    evaluate(fen, { movetime: 200, depth: 12 }).then((r) => {
+    // 120ms debounce so rapid review navigation collapses to one search
+    const t = setTimeout(() => {
       if (seq !== evalSeq.current) return;
-      setLiveCp(r.cp);
-    });
+      void liveEvaluate(fen, 90);
+    }, 120);
+    return () => clearTimeout(t);
   }, [engineReady, displayChess, reviewing]);
+
+  // Low-time warning — play tenseconds.mp3 once when player has ≤ 10s
+  useEffect(() => {
+    resetTensecWarning();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPlies]); // reset on each new game start (totalPlies resets to 0)
+
+  // Actually fire the tenseconds sound when player clock crosses 10 s.
+  // clock.whiteMs/blackMs are the canonical remaining values.
+  useEffect(() => {
+    const ms = playerColor === "white" ? clock.whiteMs : clock.blackMs;
+    if (ms <= 10000 && ms > 0 && !gameOver) sfx.tenseconds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerColor === "white" ? Math.floor(clock.whiteMs / 1000) : Math.floor(clock.blackMs / 1000)]);
 
   // Persist PGN whenever the game changes
   useEffect(() => {
@@ -406,6 +441,9 @@ function PlayPage() {
   useEffect(() => {
     const over = fullGame.isGameOver() || forcedReason !== null;
     if (!over || results) return;
+    // Stop engine immediately — no background thinking after game ends
+    stopEngine();
+    stopLiveEngine();
 
     let outcome: GameOutcome;
     let reason: GameReason;
@@ -530,7 +568,14 @@ function PlayPage() {
     // Player just acted — clear any lingering bot speech bubble
     setBotMessage(null);
     const movedSide = fullGame.turn();
-    const m = fullGame.move({ from, to, promotion: promotion ?? "q" });
+    let m: ReturnType<Chess["move"]> | null = null;
+    try {
+      m = fullGame.move({ from, to, promotion: promotion ?? "q" });
+    } catch {
+      sfx.illegal();
+      return;
+    }
+    if (!m) { sfx.illegal(); return; }
     if (m) {
       playMoveSounds(m);
       clock.addIncrement(movedSide);
@@ -539,7 +584,8 @@ function PlayPage() {
       } else {
         clock.setRunning(null);
       }
-      recordCpl(true);
+      // Defer CPL recording so it never delays the move response
+      setTimeout(() => recordCpl(true), 200);
       if (!firstMoveSpokenRef.current && bot.onFirstMove?.length) {
         firstMoveSpokenRef.current = true;
         showBotLine(bot.onFirstMove);
@@ -601,7 +647,7 @@ function PlayPage() {
       if (selected) {
         const sPiece = fullGame.get(selected);
         if (sPiece && sPiece.color === playerColorCode && selected !== sq) {
-          setPremove({ from: selected, to: sq });
+          setPremove({ from: selected, to: sq }); sfx.premove();
           setSelected(null);
           return;
         }
@@ -683,7 +729,7 @@ function PlayPage() {
     setDrawOfferState("pending");
     try {
       // Evaluate current position from bot's POV
-      const r = await evaluate(fullGame.fen(), { movetime: 400, depth: 14 });
+      const r = await evaluate(fullGame.fen(), { movetime: 150 });
       // r.cp is from side-to-move POV. Convert to bot POV.
       const botSide = playerColor === "white" ? "b" : "w";
       const sideToMove = fullGame.turn();
@@ -708,6 +754,8 @@ function PlayPage() {
   };
 
   const onNewGame = (color?: Color) => {
+    stopEngine();
+    stopLiveEngine();
     stop();
     const fresh = new Chess();
     setFullGame(fresh);
@@ -717,7 +765,7 @@ function PlayPage() {
     setOpeningName(null);
     setThinking(false);
     setViewPly(-1);
-    setLiveCp(0);
+    // eval bar resets via game loop on first eval of new position
     setForcedReason(null);
     setResigned(null);
     setResults(null);
@@ -826,7 +874,7 @@ function PlayPage() {
 
             {/* Eval bar (horizontal) + Board */}
             <div className="space-y-1.5">
-              <HorizontalEvalBar cp={liveCp} orientation={playerColor} loading={thinking} />
+              <HorizontalEvalBar orientation={playerColor} loading={thinking} />
               <Board
                 chess={displayChess}
                 orientation={playerColor}

@@ -1,7 +1,7 @@
 // GameReview — full game analysis panel.
 //
 // Analysis pipeline (Lichess / Chess.com compatible):
-//  1. Evaluate every position in the game with Stockfish at depth 18.
+//  1. Evaluate every position with Stockfish at movetime:50 ms per position.
 //     Only the FIRST call sends "ucinewgame" so the hash table is preserved
 //     across the whole game — this gives much more accurate evaluations.
 //  2. For each ply compute the win-% loss from the mover's perspective using
@@ -105,22 +105,25 @@ export function GameReview({
         fens.push(c.fen());
       }
 
-      // ── Step 1: evaluate every position ─────────────────────────────────
-      // freshGame:true only for the very first position so Stockfish clears its
-      // hash table once, then reuses cached transpositions for the rest of the
-      // game.  This is the single biggest accuracy improvement vs the old code.
+      // ── Evaluate every position and classify on the fly ────────────────
+      // movetime:50 gives ~50 ms per position — fast and accurate enough.
+      // Skipping depth-based search avoids unbounded search times in WASM.
+      // freshGame:true only on the first call so the hash table is preserved
+      // across positions (Stockfish reuses transpositions from earlier plies).
+      // Results are streamed into analyzed[] as they arrive so the UI updates
+      // progressively instead of waiting for all positions to finish.
       const evals: { cp: number; best: string | null }[] = [];
       for (let i = 0; i < fens.length; i++) {
         if (cancelRef.current) return;
         const r = await evaluate(fens[i], {
-          depth: 18,
+          movetime: 50,
           freshGame: i === 0,
         });
         evals.push({ cp: r.cp, best: r.bestMove });
         setProgress(Math.round(((i + 1) / fens.length) * 100));
       }
 
-      // ── Step 2: classify each move ───────────────────────────────────────
+      // ── Classify each move ───────────────────────────────────────────────
       const out: ReviewPly[] = [];
       for (let i = 0; i < history.length; i++) {
         const moverIsWhite = i % 2 === 0;

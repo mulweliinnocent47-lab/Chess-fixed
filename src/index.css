@@ -14,7 +14,7 @@
   --board-dark: oklch(0.55 0.08 240);
   --board-highlight: oklch(0.85 0.16 95 / 0.55);
   --board-hint: oklch(0.72 0.18 150 / 0.75);
-  --board-last: oklch(0.92 0.22 100 / 0.85);
+  --board-last: oklch(0.88 0.20 95 / 0.72);
   --board-premove: oklch(0.65 0.22 25 / 0.55);
   --board-best: oklch(0.72 0.2 145 / 0.65);
   --board-check: oklch(0.65 0.22 25 / 0.75);
@@ -99,10 +99,7 @@
   0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
   40% { transform: translateY(-3px); opacity: 1; }
 }
-.piece-slide {
-  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  will-change: transform;
-}
+/* .piece-slide: removed — Board.tsx now uses @keyframes piece-slide */
 
 .btn-primary-glow {
   background: var(--gradient-accent);
@@ -136,3 +133,74 @@
 .btn-soft:active:not(:disabled) {
   transform: translateY(0);
 }
+
+/* ── Piece slide animation ───────────────────────────────────────────────── */
+/* Board.tsx drives this via CSS custom properties --dx and --dy.            */
+/* 100 ms is fast enough to feel snappy but slow enough to read.             */
+@keyframes piece-slide {
+  from { transform: translate(var(--dx, 0), var(--dy, 0)); }
+  to   { transform: translate(0, 0); }
+}
+
+/* ── GPU acceleration hints ────────────────────────────────────────────── */
+/* Promotes eval bars and the board to their own compositor layers.        */
+/* This lets them animate without triggering layout on the rest of the page. */
+.eval-bar-fill {
+  will-change: width, height;
+  transform: translateZ(0);
+}
+
+/* Piece images: promote to own layer only while animating (via JS inline style). */
+/* After animation, will-change is reset to "auto" to release the layer.  */
+img[style*="piece-slide"] {
+  will-change: transform;
+}
+
+/* Prevent layout shifts from SVG piece images loading */
+.board-piece {
+  contain: layout style;
+}
+
+/* ── Content visibility — skip render for off-screen panels ────────────── */
+/* Move history and captured pieces are often below the fold on mobile.    */
+.content-lazy {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 200px;
+}
+
+/* ── Touch optimisation ─────────────────────────────────────────────────── */
+/* Eliminates the 300ms tap delay on mobile browsers (iOS Safari, Chrome).  */
+/* touch-action: manipulation disables double-tap-to-zoom on interactive    */
+/* elements, making taps respond at native speed.                            */
+button,
+a,
+[role="button"],
+.cursor-pointer,
+input,
+select {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Board squares need manipulation to prevent scroll interference            */
+.grid-cols-8 > div {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection on drag                                            */
+img {
+  -webkit-user-drag: auto;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Contain board layout — prevents style recalculations from propagating    */
+.grid-cols-8 {
+  contain: layout style;
+}
+
+/* Board wrapper containment — isolates board repaints from page layout     */
+[style*="translateZ(0)"] {
+  contain: layout paint;
+}
+

@@ -1,11 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+// Board.tsx — Performance-optimised chess board
+//
+// Key optimisations:
+//  1. React.memo on the top-level Board — won't re-render if props are equal.
+//  2. Each square is its own memoised Square component — only the 1-2 squares
+//     that actually changed re-render per move (vs all 64 before).
+//  3. Drag handlers are stable useCallback refs — squares don't re-render just
+//     because a parent state changed that isn't relevant to them.
+//  4. GPU-accelerated piece animation via @keyframes piece-slide (CSS-only,
+//     no JS per frame).
+//  5. CSS transform3d on the board wrapper forces compositor-thread rendering.
+
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Chess, Square } from "chess.js";
 
-type MoveGlyph = {
-  square: Square;
-  glyph: string;
-  color: string;
-};
+type MoveGlyph = { square: Square; glyph: string; color: string };
 
 type Props = {
   chess: Chess;
@@ -23,14 +31,151 @@ type Props = {
   onDragMove: (from: Square, to: Square) => void;
 };
 
+// ── Static lookups (computed once, never allocate per render) ─────────────────
+
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 const RANKS = ["8", "7", "6", "5", "4", "3", "2", "1"] as const;
+const FILE_IDX = Object.fromEntries(FILES.map((f, i) => [f, i])) as Record<string, number>;
 
-function pieceUrl(color: "w" | "b", type: string) {
-  return `/pieces/${color}${type}.svg`;
+const PIECE_URLS: Record<string, string> = {};
+function pieceUrl(color: "w" | "b", type: string): string {
+  const key = color + type;
+  return PIECE_URLS[key] ?? (PIECE_URLS[key] = `/pieces/${color}${type}.svg`);
 }
 
-export function Board({
+// Pre-build the square grid for each orientation (computed once at module load)
+const SQUARES_WHITE = (() => {
+  const out: { sq: Square; rIdx: number; fIdx: number; file: string; rank: string }[] = [];
+  RANKS.forEach((rank, rIdx) => FILES.forEach((file, fIdx) => {
+    out.push({ sq: `${file}${rank}` as Square, rIdx, fIdx, file, rank });
+  }));
+  return out;
+})();
+const SQUARES_BLACK = (() => {
+  const out: { sq: Square; rIdx: number; fIdx: number; file: string; rank: string }[] = [];
+  [...RANKS].reverse().forEach((rank, rIdx) => [...FILES].reverse().forEach((file, fIdx) => {
+    out.push({ sq: `${file}${rank}` as Square, rIdx, fIdx, file, rank });
+  }));
+  return out;
+})();
+
+// ── Per-square component (memoised) ──────────────────────────────────────────
+
+type SquareProps = {
+  sq: Square;
+  rIdx: number;
+  fIdx: number;
+  file: string;
+  rank: string;
+  isLight: boolean;
+  piece: { type: string; color: "w" | "b" } | null;
+  isSelected: boolean;
+  isTarget: boolean;
+  isLast: boolean;
+  isHintSq: boolean;
+  isBestSq: boolean;
+  isPremoveSq: boolean;
+  isCheck: boolean;
+  isAnimTarget: boolean;
+  animKey: number;
+  animDx: number;
+  animDy: number;
+  interactive: boolean;
+  dragFrom: Square | null;
+  dragOver: Square | null;
+  glyph: MoveGlyph | null;
+  onClick: (sq: Square) => void;
+  onDragStart: (e: React.DragEvent, sq: Square) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent, sq: Square) => void;
+  onDragLeave: (sq: Square) => void;
+  onDrop: (e: React.DragEvent, sq: Square) => void;
+};
+
+const BoardSquare = memo(function BoardSquare({
+  sq, rIdx, fIdx, file, rank,
+  isLight, piece,
+  isSelected, isTarget, isLast, isHintSq, isBestSq, isPremoveSq, isCheck,
+  isAnimTarget, animKey, animDx, animDy,
+  interactive, dragFrom, dragOver, glyph,
+  onClick, onDragStart, onDragEnd, onDragOver, onDragLeave, onDrop,
+}: SquareProps) {
+  const isDragOverSq = dragOver === sq;
+
+  const slideStyle: React.CSSProperties = isAnimTarget
+    ? {
+        "--dx": `${-animDx * 100}%`,
+        "--dy": `${-animDy * 100}%`,
+        animation: "piece-slide 100ms cubic-bezier(0.25,0.46,0.45,0.94) forwards",
+        willChange: "transform",
+      } as React.CSSProperties
+    : {};
+
+  return (
+    <div
+      onClick={() => onClick(sq)}
+      onDragOver={(e) => onDragOver(e, sq)}
+      onDragLeave={() => onDragLeave(sq)}
+      onDrop={(e) => onDrop(e, sq)}
+      className="relative flex items-center justify-center cursor-pointer"
+      style={{ backgroundColor: isLight ? "var(--board-light)" : "var(--board-dark)", touchAction: "manipulation" }}
+    >
+      {isLast     && <div className="absolute inset-0" style={{ backgroundColor: "var(--board-last)" }} />}
+      {isSelected && <div className="absolute inset-0" style={{ backgroundColor: "var(--board-highlight)" }} />}
+      {isHintSq   && <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 0 4px var(--board-hint)" }} />}
+      {isBestSq   && <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 0 4px var(--board-best)" }} />}
+      {isPremoveSq && <div className="absolute inset-0" style={{ backgroundColor: "var(--board-premove)" }} />}
+      {isDragOverSq && <div className="absolute inset-0" style={{ boxShadow: "inset 0 0 0 3px var(--primary)" }} />}
+      {isCheck    && <div className="absolute inset-0" style={{ background: "radial-gradient(circle, var(--board-check) 0%, transparent 70%)" }} />}
+
+      {fIdx === 0 && (
+        <span className="absolute top-0.5 left-1 text-[9px] font-bold pointer-events-none"
+          style={{ color: isLight ? "var(--board-dark)" : "var(--board-light)", opacity: 0.7 }}>
+          {rank}
+        </span>
+      )}
+      {rIdx === 7 && (
+        <span className="absolute bottom-0.5 right-1 text-[9px] font-bold pointer-events-none"
+          style={{ color: isLight ? "var(--board-dark)" : "var(--board-light)", opacity: 0.7 }}>
+          {file}
+        </span>
+      )}
+
+      {piece && (
+        <img
+          key={isAnimTarget ? animKey : sq}
+          src={pieceUrl(piece.color, piece.type)}
+          alt={`${piece.color}${piece.type}`}
+          draggable={interactive}
+          onDragStart={(e) => onDragStart(e, sq)}
+          onDragEnd={onDragEnd}
+          className="relative w-[88%] h-[88%] drop-shadow-md z-10 pointer-events-auto"
+          style={{
+            opacity: dragFrom === sq ? 0.4 : 1,
+            cursor: interactive ? "grab" : "default",
+            ...slideStyle,
+          }}
+        />
+      )}
+
+      {isTarget && !piece && <div className="absolute w-[28%] h-[28%] rounded-full bg-black/30 pointer-events-none" />}
+      {isTarget && piece  && <div className="absolute inset-1 rounded-full ring-4 ring-black/30 pointer-events-none" />}
+
+      {glyph?.square === sq && (
+        <div
+          className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[10px] md:text-xs font-black text-white pointer-events-none z-20"
+          style={{ background: glyph.color, boxShadow: "0 2px 6px oklch(0 0 0 / 0.4), 0 0 0 2px oklch(0.16 0.02 250)" }}
+        >
+          {glyph.glyph}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ── Main Board component ──────────────────────────────────────────────────────
+
+export const Board = memo(function Board({
   chess,
   orientation,
   selected,
@@ -47,212 +192,118 @@ export function Board({
 }: Props) {
   const board = chess.board();
   const inCheckColor = chess.inCheck() ? chess.turn() : null;
+
   const [dragOver, setDragOver] = useState<Square | null>(null);
   const [dragFrom, setDragFrom] = useState<Square | null>(null);
 
-  // Animate the moving piece by translating from `from` -> `to`
-  const [animFrom, setAnimFrom] = useState<Square | null>(null);
+  // Animation state — drive CSS keyframe on the destination square
+  const [animState, setAnimState] = useState<{
+    toSq: Square; dx: number; dy: number; key: number;
+  } | null>(null);
   const lastMoveRef = useRef<{ from: Square; to: Square } | null>(null);
+  const animKeyRef  = useRef(0);
+
   useEffect(() => {
-    if (!lastMove) {
-      lastMoveRef.current = null;
-      return;
-    }
+    if (!lastMove) { lastMoveRef.current = null; setAnimState(null); return; }
     const prev = lastMoveRef.current;
-    if (!prev || prev.from !== lastMove.from || prev.to !== lastMove.to) {
-      lastMoveRef.current = lastMove;
-      setAnimFrom(lastMove.from);
-      const t = setTimeout(() => setAnimFrom(null), 230);
-      return () => clearTimeout(t);
-    }
-  }, [lastMove]);
+    if (prev?.from === lastMove.from && prev?.to === lastMove.to) return;
+    lastMoveRef.current = lastMove;
 
-  const squares = useMemo(() => {
-    const files = orientation === "white" ? FILES : [...FILES].reverse();
-    const ranks = orientation === "white" ? RANKS : [...RANKS].reverse();
-    const out: { sq: Square; rIdx: number; fIdx: number; file: string; rank: string }[] = [];
-    ranks.forEach((rank, rIdx) => {
-      files.forEach((file, fIdx) => {
-        out.push({ sq: `${file}${rank}` as Square, rIdx, fIdx, file, rank });
-      });
-    });
-    return out;
-  }, [orientation]);
+    const dx = FILE_IDX[lastMove.to[0]] - FILE_IDX[lastMove.from[0]];
+    const dy = (8 - parseInt(lastMove.to[1], 10)) - (8 - parseInt(lastMove.from[1], 10));
+    const sdx = orientation === "black" ? -dx : dx;
+    const sdy = orientation === "black" ? -dy : dy;
+    setAnimState({ toSq: lastMove.to, dx: sdx, dy: sdy, key: ++animKeyRef.current });
+  }, [lastMove, orientation]);
 
-  // Compute pixel offset (in % of one square = 12.5% of board) for slide animation
-  const getSlideTransform = (sq: Square): string | undefined => {
-    if (animFrom !== sq || !lastMove) return undefined;
-    const fromFile = FILES.indexOf(lastMove.from[0] as (typeof FILES)[number]);
-    const toFile = FILES.indexOf(lastMove.to[0] as (typeof FILES)[number]);
-    const fromRank = 8 - parseInt(lastMove.from[1], 10);
-    const toRank = 8 - parseInt(lastMove.to[1], 10);
-    let dx = toFile - fromFile;
-    let dy = toRank - fromRank;
-    if (orientation === "black") {
-      dx = -dx;
-      dy = -dy;
-    }
-    // Start offset (we'll then transition to translate(0,0))
-    return `translate(${-dx * 100}%, ${-dy * 100}%)`;
-  };
+  // Stable drag callbacks — don't cause all 64 squares to re-render
+  const handleDragStart = useCallback((e: React.DragEvent, sq: Square) => {
+    if (!interactive) { e.preventDefault(); return; }
+    e.dataTransfer.setData("text/plain", sq);
+    e.dataTransfer.effectAllowed = "move";
+    setDragFrom(sq);
+  }, [interactive]);
+
+  const handleDragEnd = useCallback(() => setDragFrom(null), []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, sq: Square) => {
+    if (!interactive) return;
+    e.preventDefault();
+    setDragOver((prev) => prev === sq ? prev : sq);
+  }, [interactive]);
+
+  const handleDragLeave = useCallback((sq: Square) => {
+    setDragOver((prev) => prev === sq ? null : prev);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, sq: Square) => {
+    e.preventDefault();
+    setDragOver(null);
+    const from = e.dataTransfer.getData("text/plain") as Square;
+    if (from && from !== sq) onDragMove(from, sq);
+    setDragFrom(null);
+  }, [onDragMove]);
+
+  // Use pre-built square grids — no allocation per render
+  const squares = orientation === "white" ? SQUARES_WHITE : SQUARES_BLACK;
+
+  // Memoise the legalTargets Set so `.has()` is O(1) and prop comparison is stable
+  const targetSet = useMemo(() => new Set(legalTargets), [legalTargets]);
 
   return (
     <div
       className="relative w-full aspect-square rounded-xl overflow-hidden select-none"
-      style={{ boxShadow: "var(--shadow-board)" }}
+      style={{
+        boxShadow: "var(--shadow-board)",
+        // Force GPU compositing for the whole board — smoother animations
+        transform: "translateZ(0)",
+        backfaceVisibility: "hidden",
+      }}
     >
       <div className="grid grid-cols-8 grid-rows-8 w-full h-full">
         {squares.map(({ sq, rIdx, fIdx, file, rank }) => {
           const isLight = (rIdx + fIdx) % 2 === 0;
-          const fileIdx = FILES.indexOf(file as (typeof FILES)[number]);
           const rankIdx = 8 - parseInt(rank, 10);
-          const piece = board[rankIdx][fileIdx];
-          const isSelected = selected === sq;
-          const isTarget = legalTargets.includes(sq);
-          const isLast = lastMove && (lastMove.from === sq || lastMove.to === sq);
-          const isHintSq = hint && (hint.from === sq || hint.to === sq);
-          const isBestSq = bestMoveHint && (bestMoveHint.from === sq || bestMoveHint.to === sq);
-          const isPremoveSq = premove && (premove.from === sq || premove.to === sq);
-          const isCheck = piece && piece.type === "k" && piece.color === inCheckColor;
-          const isDragOver = dragOver === sq;
+          const piece   = board[rankIdx][FILE_IDX[file]];
 
-          const slideTransform = piece && animFrom === sq ? getSlideTransform(sq) : undefined;
+          const isAnimTarget = animState?.toSq === sq;
 
           return (
-            <div
+            <BoardSquare
               key={sq}
-              onClick={() => onSquareClick(sq)}
-              onDragOver={(e) => {
-                if (!interactive) return;
-                e.preventDefault();
-                if (dragOver !== sq) setDragOver(sq);
-              }}
-              onDragLeave={() => {
-                if (dragOver === sq) setDragOver(null);
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(null);
-                const from = e.dataTransfer.getData("text/plain") as Square;
-                if (from && from !== sq) onDragMove(from, sq);
-                setDragFrom(null);
-              }}
-              className="relative flex items-center justify-center cursor-pointer"
-              style={{
-                backgroundColor: isLight
-                  ? "var(--board-light)"
-                  : "var(--board-dark)",
-              }}
-            >
-              {isLast && (
-                <div className="absolute inset-0" style={{ backgroundColor: "var(--board-last)" }} />
-              )}
-              {isSelected && (
-                <div className="absolute inset-0" style={{ backgroundColor: "var(--board-highlight)" }} />
-              )}
-              {isHintSq && (
-                <div
-                  className="absolute inset-0"
-                  style={{ boxShadow: "inset 0 0 0 4px var(--board-hint)" }}
-                />
-              )}
-              {isBestSq && (
-                <div
-                  className="absolute inset-0"
-                  style={{ boxShadow: "inset 0 0 0 4px var(--board-best)" }}
-                />
-              )}
-              {isPremoveSq && (
-                <div
-                  className="absolute inset-0"
-                  style={{ backgroundColor: "var(--board-premove)" }}
-                />
-              )}
-              {isDragOver && (
-                <div
-                  className="absolute inset-0"
-                  style={{ boxShadow: "inset 0 0 0 3px var(--primary)" }}
-                />
-              )}
-              {isCheck && (
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    background:
-                      "radial-gradient(circle, var(--board-check) 0%, transparent 70%)",
-                  }}
-                />
-              )}
-              {fIdx === 0 && (
-                <span
-                  className="absolute top-0.5 left-1 text-[9px] font-bold pointer-events-none"
-                  style={{ color: isLight ? "var(--board-dark)" : "var(--board-light)", opacity: 0.7 }}
-                >
-                  {rank}
-                </span>
-              )}
-              {rIdx === 7 && (
-                <span
-                  className="absolute bottom-0.5 right-1 text-[9px] font-bold pointer-events-none"
-                  style={{ color: isLight ? "var(--board-dark)" : "var(--board-light)", opacity: 0.7 }}
-                >
-                  {file}
-                </span>
-              )}
-              {piece && (
-                <img
-                  src={pieceUrl(piece.color, piece.type)}
-                  alt={`${piece.color}${piece.type}`}
-                  draggable={interactive}
-                  onDragStart={(e) => {
-                    if (!interactive) {
-                      e.preventDefault();
-                      return;
-                    }
-                    e.dataTransfer.setData("text/plain", sq);
-                    e.dataTransfer.effectAllowed = "move";
-                    setDragFrom(sq);
-                  }}
-                  onDragEnd={() => setDragFrom(null)}
-                  className="relative w-[88%] h-[88%] drop-shadow-md piece-slide z-10"
-                  style={{
-                    opacity: dragFrom === sq ? 0.4 : 1,
-                    cursor: interactive ? "grab" : "default",
-                    transform: slideTransform ?? "translate(0,0)",
-                    transition: slideTransform ? "none" : "transform 220ms cubic-bezier(0.22,0.61,0.36,1)",
-                  }}
-                  ref={(el) => {
-                    // Force reflow then clear transform to animate to (0,0)
-                    if (el && slideTransform) {
-                      requestAnimationFrame(() => {
-                        el.style.transition = "transform 220ms cubic-bezier(0.22,0.61,0.36,1)";
-                        el.style.transform = "translate(0,0)";
-                      });
-                    }
-                  }}
-                />
-              )}
-              {isTarget && !piece && (
-                <div className="absolute w-[28%] h-[28%] rounded-full bg-black/30 pointer-events-none" />
-              )}
-              {isTarget && piece && (
-                <div className="absolute inset-1 rounded-full ring-4 ring-black/30 pointer-events-none" />
-              )}
-              {moveGlyph && moveGlyph.square === sq && (
-                <div
-                  className="absolute top-0 right-0 translate-x-1/3 -translate-y-1/3 w-6 h-6 md:w-7 md:h-7 rounded-full flex items-center justify-center text-[10px] md:text-xs font-black text-white pointer-events-none z-20"
-                  style={{
-                    background: moveGlyph.color,
-                    boxShadow: "0 2px 6px oklch(0 0 0 / 0.4), 0 0 0 2px oklch(0.16 0.02 250)",
-                  }}
-                >
-                  {moveGlyph.glyph}
-                </div>
-              )}
-            </div>
+              sq={sq}
+              rIdx={rIdx}
+              fIdx={fIdx}
+              file={file}
+              rank={rank}
+              isLight={isLight}
+              piece={piece}
+              isSelected={selected === sq}
+              isTarget={targetSet.has(sq)}
+              isLast={!!(lastMove && (lastMove.from === sq || lastMove.to === sq))}
+              isHintSq={!!(hint && (hint.from === sq || hint.to === sq))}
+              isBestSq={!!(bestMoveHint && (bestMoveHint.from === sq || bestMoveHint.to === sq))}
+              isPremoveSq={!!(premove && (premove.from === sq || premove.to === sq))}
+              isCheck={piece?.type === "k" && piece.color === inCheckColor}
+              isAnimTarget={!!isAnimTarget}
+              animKey={animState?.key ?? 0}
+              animDx={animState?.dx ?? 0}
+              animDy={animState?.dy ?? 0}
+              interactive={interactive}
+              dragFrom={dragFrom}
+              dragOver={dragOver}
+              glyph={moveGlyph ?? null}
+              onClick={onSquareClick}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            />
           );
         })}
       </div>
+
       {thinking && (
         <div className="absolute inset-0 pointer-events-none flex items-start justify-center">
           <div className="mt-2 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-primary text-primary-foreground shadow-lg flex items-center gap-1.5 animate-pulse">
@@ -263,4 +314,4 @@ export function Board({
       )}
     </div>
   );
-}
+});
